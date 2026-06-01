@@ -1,0 +1,609 @@
+from __future__ import annotations
+
+import math
+import json
+import urllib.parse
+import urllib.request
+from datetime import date, datetime, timedelta
+from typing import Any, Dict, List, Optional
+
+try:
+    import requests
+except ImportError:  # pragma: no cover - fallback for minimal lab environments.
+    requests = None
+
+
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
+OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+
+HEADERS = {
+    "User-Agent": "lab3-travel-planner-agent/1.0",
+}
+
+DEFAULT_TIMEOUT = 12
+
+AIRPORT_CODE_LOCATIONS = {
+    "HAN": "Sân bay Nội Bài, Hà Nội",
+    "DAD": "Sân bay Đà Nẵng",
+    "SGN": "Sân bay Tân Sơn Nhất, Thành phố Hồ Chí Minh",
+    "CXR": "Sân bay Cam Ranh, Khánh Hòa",
+    "PQC": "Sân bay Phú Quốc, Kiên Giang",
+    "HUI": "Sân bay Phú Bài, Huế",
+    "DLI": "Sân bay Liên Khương, Đà Lạt",
+    "VCA": "Sân bay Cần Thơ",
+    "VII": "Sân bay Vinh",
+    "HPH": "Sân bay Cát Bi, Hải Phòng",
+}
+
+
+def _request_json(url: str, params: Optional[Dict[str, Any]] = None) -> Any:
+    if requests is None:
+        query = urllib.parse.urlencode(params or {})
+        full_url = f"{url}?{query}" if query else url
+        request = urllib.request.Request(full_url, headers=HEADERS)
+        with urllib.request.urlopen(request, timeout=DEFAULT_TIMEOUT) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    response = requests.get(
+        url,
+        params=params,
+        headers=HEADERS,
+        timeout=DEFAULT_TIMEOUT,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def _resolve_place_query(location: str) -> str:
+    return AIRPORT_CODE_LOCATIONS.get(str(location).upper(), location)
+
+
+def _safe_error(tool_name: str, error: Exception) -> Dict[str, Any]:
+    return {
+        "tool": tool_name,
+        "status": "error",
+        "error": str(error),
+        "message": (
+            "Không lấy được dữ liệu trực tuyến lúc này. "
+            "Agent nên nói rõ giới hạn này thay vì tự bịa kết quả."
+        ),
+    }
+
+
+def _normalize_limit(limit: int, default: int = 5, max_limit: int = 12) -> int:
+    try:
+        value = int(limit)
+    except (TypeError, ValueError):
+        return default
+    return max(1, min(value, max_limit))
+
+
+def _haversine_km(
+    lat1: float,
+    lon1: float,
+    lat2: float,
+    lon2: float,
+) -> float:
+    radius_km = 6371.0
+    d_lat = math.radians(lat2 - lat1)
+    d_lon = math.radians(lon2 - lon1)
+    a = (
+        math.sin(d_lat / 2) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(d_lon / 2) ** 2
+    )
+    return 2 * radius_km * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _format_vnd(amount: int) -> str:
+    return f"{amount:,} VND".replace(",", ".")
+
+
+def _daily_value(daily: Dict[str, List[Any]], key: str, index: int) -> Any:
+    values = daily.get(key, [])
+    if index >= len(values):
+        return None
+    return values[index]
+
+
+def geocode_location(location: str) -> Dict[str, Any]:
+    """
+    Tìm tọa độ và thông tin định danh cơ bản của một địa điểm.
+    Dùng Nominatim/OpenStreetMap nên không cần API key.
+    """
+    try:
+        data = _request_json(
+            NOMINATIM_URL,
+            {
+                "q": _resolve_place_query(location),
+                "format": "json",
+                "limit": 1,
+                "addressdetails": 1,
+            },
+        )
+
+        if not data:
+            return {
+                "tool": "geocode_location",
+                "status": "not_found",
+                "query": location,
+                "message": "Không tìm thấy địa điểm phù hợp.",
+            }
+
+        item = data[0]
+        return {
+            "tool": "geocode_location",
+            "status": "ok",
+            "query": location,
+            "name": item.get("display_name"),
+            "latitude": float(item["lat"]),
+            "longitude": float(item["lon"]),
+            "type": item.get("type"),
+            "address": item.get("address", {}),
+            "source": "OpenStreetMap Nominatim",
+        }
+    except Exception as error:
+        return _safe_error("geocode_location", error)
+
+
+def get_weather(location: str, forecast_days: int = 3) -> Dict[str, Any]:
+    """
+    Lấy dự báo thời tiết theo ngày cho địa điểm.
+    """
+    place = geocode_location(location)
+    if place.get("status") != "ok":
+        return {
+            "tool": "get_weather",
+            "status": "error",
+            "location": location,
+            "message": "Không thể lấy thời tiết vì không xác định được tọa độ.",
+            "geocode": place,
+        }
+
+    days = max(1, min(int(forecast_days or 3), 7))
+    try:
+        data = _request_json(
+            OPEN_METEO_URL,
+            {
+                "latitude": place["latitude"],
+                "longitude": place["longitude"],
+                "daily": ",".join(
+                    [
+                        "temperature_2m_max",
+                        "temperature_2m_min",
+                        "precipitation_probability_max",
+                        "weather_code",
+                    ]
+                ),
+                "timezone": "auto",
+                "forecast_days": days,
+            },
+        )
+
+        daily = data.get("daily", {})
+        forecasts = []
+        for index, day in enumerate(daily.get("time", [])[:days]):
+            forecasts.append(
+                {
+                    "date": day,
+                    "temp_min_c": _daily_value(daily, "temperature_2m_min", index),
+                    "temp_max_c": _daily_value(daily, "temperature_2m_max", index),
+                    "rain_probability_percent": _daily_value(
+                        daily,
+                        "precipitation_probability_max",
+                        index,
+                    ),
+                    "weather_code": _daily_value(daily, "weather_code", index),
+                }
+            )
+
+        return {
+            "tool": "get_weather",
+            "status": "ok",
+            "location": location,
+            "resolved_location": place.get("name"),
+            "forecast_days": days,
+            "forecasts": forecasts,
+            "source": "Open-Meteo",
+        }
+    except Exception as error:
+        return _safe_error("get_weather", error)
+
+
+def _overpass_search(
+    location: str,
+    radius: int,
+    limit: int,
+    filters: List[str],
+    tool_name: str,
+) -> Dict[str, Any]:
+    place = geocode_location(location)
+    if place.get("status") != "ok":
+        return {
+            "tool": tool_name,
+            "status": "error",
+            "location": location,
+            "message": "Không thể tìm xung quanh vì không xác định được tọa độ.",
+            "geocode": place,
+        }
+
+    safe_limit = _normalize_limit(limit)
+    safe_radius = max(500, min(int(radius or 5000), 30000))
+    lat = float(place["latitude"])
+    lon = float(place["longitude"])
+    filter_query = "\n".join(
+        filter_expression.format(radius=safe_radius, lat=lat, lon=lon)
+        for filter_expression in filters
+    )
+    query = f"""
+    [out:json][timeout:25];
+    (
+      {filter_query}
+    );
+    out center tags {safe_limit};
+    """
+
+    try:
+        data = _request_json(OVERPASS_URL, {"data": query})
+        items = []
+        for element in data.get("elements", []):
+            tags = element.get("tags", {})
+            item_lat = element.get("lat") or element.get("center", {}).get("lat")
+            item_lon = element.get("lon") or element.get("center", {}).get("lon")
+            if item_lat is None or item_lon is None:
+                continue
+
+            name = tags.get("name") or tags.get("name:vi") or tags.get("name:en")
+            if not name:
+                continue
+
+            items.append(
+                {
+                    "name": name,
+                    "category": (
+                        tags.get("tourism")
+                        or tags.get("amenity")
+                        or tags.get("historic")
+                        or tags.get("leisure")
+                    ),
+                    "latitude": float(item_lat),
+                    "longitude": float(item_lon),
+                    "distance_km": round(
+                        _haversine_km(lat, lon, float(item_lat), float(item_lon)),
+                        2,
+                    ),
+                    "address_hint": tags.get("addr:street"),
+                    "website": tags.get("website"),
+                    "phone": tags.get("phone"),
+                }
+            )
+
+        items.sort(key=lambda item: item["distance_km"])
+        return {
+            "tool": tool_name,
+            "status": "ok",
+            "location": location,
+            "resolved_location": place.get("name"),
+            "radius_m": safe_radius,
+            "count": len(items[:safe_limit]),
+            "results": items[:safe_limit],
+            "source": "OpenStreetMap Overpass",
+            "warning": (
+                "Dữ liệu OSM có thể thiếu giá phòng, giờ mở cửa hoặc đánh giá. "
+                "Nên kiểm tra thêm trước khi đặt dịch vụ."
+            ),
+        }
+    except Exception as error:
+        return _safe_error(tool_name, error)
+
+
+def search_attractions(
+    location: str,
+    radius: int = 10000,
+    limit: int = 8,
+) -> Dict[str, Any]:
+    """
+    Tìm điểm tham quan/địa điểm vui chơi quanh một khu vực.
+    """
+    radius_value = max(500, min(int(radius or 10000), 30000))
+    filters = [
+        'node(around:{radius},{lat},{lon})["tourism"~"attraction|museum|viewpoint|zoo|theme_park|gallery"];',
+        'way(around:{radius},{lat},{lon})["tourism"~"attraction|museum|viewpoint|zoo|theme_park|gallery"];',
+        'node(around:{radius},{lat},{lon})["historic"];',
+        'way(around:{radius},{lat},{lon})["historic"];',
+    ]
+    return _overpass_search(location, radius_value, limit, filters, "search_attractions")
+
+
+def search_stays(
+    location: str,
+    radius: int = 5000,
+    limit: int = 5,
+) -> Dict[str, Any]:
+    """
+    Tìm khách sạn/homestay/hostel quanh một địa điểm.
+    """
+    radius_value = max(500, min(int(radius or 5000), 30000))
+    filters = [
+        'node(around:{radius},{lat},{lon})["tourism"~"hotel|hostel|guest_house|apartment|motel|chalet"];',
+        'way(around:{radius},{lat},{lon})["tourism"~"hotel|hostel|guest_house|apartment|motel|chalet"];',
+    ]
+    result = _overpass_search(location, radius_value, limit, filters, "search_stays")
+    if result.get("status") == "ok":
+        result["price_note"] = (
+            "OSM thường không có giá phòng. Hãy xem đây là danh sách khu vực/lựa chọn "
+            "để kiểm tra tiếp trên Booking, Agoda hoặc trang trực tiếp của chỗ ở."
+        )
+    return result
+
+
+def search_restaurants(
+    location: str,
+    cuisine: Optional[str] = None,
+    radius: int = 5000,
+    limit: int = 5,
+) -> Dict[str, Any]:
+    """
+    Tìm quán ăn/nhà hàng/cafe quanh một địa điểm.
+    """
+    radius_value = max(500, min(int(radius or 5000), 30000))
+    cuisine_filter = ""
+    if cuisine:
+        cuisine_filter = f'["cuisine"~"{cuisine}",i]'
+
+    filters = [
+        'node(around:{radius},{lat},{lon})["amenity"~"restaurant|cafe|fast_food|food_court"]'
+        f"{cuisine_filter};",
+        'way(around:{radius},{lat},{lon})["amenity"~"restaurant|cafe|fast_food|food_court"]'
+        f"{cuisine_filter};",
+    ]
+    result = _overpass_search(location, radius_value, limit, filters, "search_restaurants")
+    if result.get("status") == "ok":
+        result["cuisine_filter"] = cuisine
+    return result
+
+
+def estimate_transport_cost(
+    origin: str,
+    destination: str,
+    mode: str = "bus",
+    departure_date: Optional[str] = None,
+    passengers: int = 1,
+) -> Dict[str, Any]:
+    """
+    Ước tính chi phí di chuyển khi không có API vé real-time.
+    mode: flight, bus, train, car.
+    """
+    origin_place = geocode_location(origin)
+    destination_place = geocode_location(destination)
+    if origin_place.get("status") != "ok" or destination_place.get("status") != "ok":
+        return {
+            "tool": "estimate_transport_cost",
+            "status": "error",
+            "message": "Không thể ước tính vì không xác định được tọa độ đi/đến.",
+            "origin_geocode": origin_place,
+            "destination_geocode": destination_place,
+        }
+
+    passenger_count = max(1, int(passengers or 1))
+    distance_km = _haversine_km(
+        origin_place["latitude"],
+        origin_place["longitude"],
+        destination_place["latitude"],
+        destination_place["longitude"],
+    )
+
+    normalized_mode = (mode or "bus").lower()
+    rates = {
+        "flight": (1200000, 2600000, "vé máy bay nội địa phổ thông"),
+        "bus": (1200, 2500, "vé xe khách theo km"),
+        "train": (1400, 3200, "vé tàu theo km"),
+        "car": (3500, 6500, "xăng/thuê xe hoặc taxi đường dài theo km"),
+    }
+    low_rate, high_rate, label = rates.get(normalized_mode, rates["bus"])
+
+    if normalized_mode == "flight":
+        one_way_low = low_rate
+        one_way_high = high_rate
+    else:
+        road_factor = 1.25
+        billable_km = max(distance_km * road_factor, 20)
+        one_way_low = int(billable_km * low_rate)
+        one_way_high = int(billable_km * high_rate)
+
+    return {
+        "tool": "estimate_transport_cost",
+        "status": "ok",
+        "origin": origin,
+        "destination": destination,
+        "mode": normalized_mode,
+        "departure_date": departure_date,
+        "passengers": passenger_count,
+        "straight_line_distance_km": round(distance_km, 1),
+        "estimated_one_way_per_person_vnd": {
+            "low": one_way_low,
+            "high": one_way_high,
+            "display": f"{_format_vnd(one_way_low)} - {_format_vnd(one_way_high)}",
+        },
+        "estimated_total_vnd": {
+            "low": one_way_low * passenger_count,
+            "high": one_way_high * passenger_count,
+            "display": (
+                f"{_format_vnd(one_way_low * passenger_count)} - "
+                f"{_format_vnd(one_way_high * passenger_count)}"
+            ),
+        },
+        "source": "Local heuristic estimate",
+        "pricing_basis": label,
+        "warning": (
+            "Đây là ước tính, không phải giá vé real-time. "
+            "Giá thực tế phụ thuộc hãng, ngày đi, hành lý và thời điểm đặt."
+        ),
+    }
+
+
+def search_flight_cost(
+    origin_code: str,
+    destination_code: str,
+    departure_date: str,
+    adults: int = 1,
+) -> Dict[str, Any]:
+    """
+    Alias theo prompt hiện có của agent. Trả về ước tính vé máy bay theo mã sân bay.
+    """
+    return estimate_transport_cost(
+        origin=origin_code,
+        destination=destination_code,
+        mode="flight",
+        departure_date=departure_date,
+        passengers=adults,
+    )
+
+
+def build_travel_plan(
+    destination: str,
+    days: int = 3,
+    origin: Optional[str] = None,
+    origin_code: Optional[str] = None,
+    destination_code: Optional[str] = None,
+    departure_date: Optional[str] = None,
+    adults: int = 1,
+    budget_vnd: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Tổng hợp dữ liệu từ các tool và gợi ý lịch trình đơn giản theo ngày.
+    """
+    safe_days = max(1, min(int(days or 3), 10))
+    weather = get_weather(destination, forecast_days=min(safe_days, 7))
+    attractions = search_attractions(destination, limit=min(8, safe_days * 3))
+    stays = search_stays(destination, limit=5)
+    restaurants = search_restaurants(destination, limit=min(8, safe_days * 2))
+
+    transport = None
+    resolved_origin = origin or origin_code
+    resolved_destination = destination_code or destination
+    if resolved_origin:
+        transport = estimate_transport_cost(
+            origin=resolved_origin,
+            destination=resolved_destination,
+            mode="flight" if origin_code or destination_code else "bus",
+            departure_date=departure_date,
+            passengers=adults,
+        )
+
+    attraction_names = [
+        item["name"] for item in attractions.get("results", []) if item.get("name")
+    ]
+    restaurant_names = [
+        item["name"] for item in restaurants.get("results", []) if item.get("name")
+    ]
+
+    itinerary = []
+    start_date = _parse_start_date(departure_date)
+    for index in range(safe_days):
+        day_attractions = attraction_names[index * 2 : index * 2 + 2]
+        day_restaurants = restaurant_names[index * 2 : index * 2 + 2]
+        itinerary.append(
+            {
+                "day": index + 1,
+                "date": (start_date + timedelta(days=index)).isoformat()
+                if start_date
+                else None,
+                "morning": day_attractions[0] if day_attractions else "Khám phá khu trung tâm",
+                "afternoon": day_attractions[1] if len(day_attractions) > 1 else "Nghỉ ngơi/cafe nhẹ",
+                "food_suggestions": day_restaurants,
+            }
+        )
+
+    budget_note = _budget_note(budget_vnd, safe_days, transport)
+    return {
+        "tool": "build_travel_plan",
+        "status": "ok",
+        "destination": destination,
+        "days": safe_days,
+        "budget_vnd": budget_vnd,
+        "budget_note": budget_note,
+        "weather": weather,
+        "attractions": attractions,
+        "stays": stays,
+        "restaurants": restaurants,
+        "transport": transport,
+        "suggested_itinerary": itinerary,
+        "planning_notes": [
+            "Ưu tiên gom điểm gần nhau trong cùng ngày để giảm thời gian di chuyển.",
+            "Kiểm tra lại giờ mở cửa, giá vé và chính sách đặt phòng trước khi chốt.",
+            "Nếu trời mưa, chuyển các hoạt động ngoài trời sang bảo tàng, cafe hoặc điểm trong nhà.",
+        ],
+    }
+
+
+def _parse_start_date(value: Optional[str]) -> Optional[date]:
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _budget_note(
+    budget_vnd: Optional[int],
+    days: int,
+    transport: Optional[Dict[str, Any]],
+) -> str:
+    if not budget_vnd:
+        return "Chưa có ngân sách cụ thể; agent nên đưa phương án tiết kiệm, cân bằng và thoải mái."
+
+    per_day = int(budget_vnd) // max(days, 1)
+    note = f"Ngân sách trung bình khoảng {_format_vnd(per_day)}/ngày."
+    if transport and transport.get("status") == "ok":
+        high_transport = transport["estimated_total_vnd"]["high"]
+        remaining = int(budget_vnd) - int(high_transport)
+        note += f" Sau ước tính di chuyển cao nhất, còn khoảng {_format_vnd(max(remaining, 0))}."
+    return note
+
+
+TRAVEL_TOOLS = [
+    {
+        "name": "geocode_location",
+        "description": "Tìm tọa độ và tên chuẩn của một địa điểm.",
+        "function": geocode_location,
+    },
+    {
+        "name": "get_weather",
+        "description": "Xem dự báo thời tiết theo ngày cho một địa điểm.",
+        "function": get_weather,
+    },
+    {
+        "name": "search_attractions",
+        "description": "Tìm điểm tham quan, địa điểm du lịch hoặc vui chơi quanh địa điểm.",
+        "function": search_attractions,
+    },
+    {
+        "name": "search_stays",
+        "description": "Tìm khách sạn, homestay, hostel hoặc guest house quanh địa điểm.",
+        "function": search_stays,
+    },
+    {
+        "name": "search_restaurants",
+        "description": "Tìm quán ăn, cafe hoặc nhà hàng xung quanh địa điểm.",
+        "function": search_restaurants,
+    },
+    {
+        "name": "estimate_transport_cost",
+        "description": "Ước tính chi phí di chuyển bằng máy bay, xe khách, tàu hoặc ô tô.",
+        "function": estimate_transport_cost,
+    },
+    {
+        "name": "search_flight_cost",
+        "description": "Ước tính chi phí vé máy bay theo mã điểm đi/đến.",
+        "function": search_flight_cost,
+    },
+    {
+        "name": "build_travel_plan",
+        "description": "Tổng hợp thời tiết, điểm chơi, lưu trú, ăn uống, di chuyển và gợi ý lịch trình.",
+        "function": build_travel_plan,
+    },
+]
