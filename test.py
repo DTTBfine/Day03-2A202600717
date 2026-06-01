@@ -3,6 +3,8 @@ import os
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
+import time
+import asyncio
 from datetime import date
 
 try:
@@ -21,10 +23,14 @@ from src.telemetry.metrics import tracker
 from src.tools.travel_api_tools import (
     estimate_transport_cost,
     get_weather,
+    research_all_destinations_async,
     search_attractions,
     search_restaurants,
     search_stays,
+    validate_travel_input,
 )
+from src.telemetry.logger import logger
+from src.telemetry.metrics import tracker
 
 
 def load_environment() -> None:
@@ -80,8 +86,19 @@ def create_llm_provider():
         )
         return LocalProvider(model_path=model_path)
 
+    if provider == "mimo":
+        from src.core.mimo_provider import MimoProvider
+
+        api_key = os.getenv("MIMO_API_KEY")
+        if not api_key:
+            raise ValueError("Missing MIMO_API_KEY in environment or .env")
+        return MimoProvider(
+            model_name=model_name or "mimo-v2.5-pro",
+            api_key=api_key,
+        )
+
     raise ValueError(
-        f"Unsupported DEFAULT_PROVIDER={provider}. Use openai, google/gemini, or local."
+        f"Unsupported DEFAULT_PROVIDER={provider}. Use openai, google/gemini, local, or mimo."
     )
 
 
@@ -370,6 +387,7 @@ def _fallback_destination_candidates(params: dict) -> list:
 
 
 def research_agent(destination_option: dict, params: dict) -> dict:
+    """Sync wrapper for backward compatibility - calls async version."""
     destination = destination_option["destination"]
     days = params["days"]
     transport_mode = (
@@ -422,6 +440,66 @@ def collect_research_for_destinations(params: dict, destination_options: list) -
         ]
         return [f.result() for f in futures]
 
+    # Use async research for better performance
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        result = loop.run_until_complete(
+            research_destination_async(destination, params, destination_option)
+        )
+        return {
+            "destination_option": destination_option,
+            "weather": result.get("tool_results", {}).get("weather", {}),
+            "attractions": result.get("tool_results", {}).get("attractions", {}),
+            "stays": result.get("tool_results", {}).get("stays", {}),
+            "restaurants": result.get("tool_results", {}).get("restaurants", {}),
+            "transport": result.get("tool_results", {}).get("transport"),
+            "research_latency_ms": result.get("research_latency_ms", 0),
+            "errors": result.get("errors", []),
+        }
+    finally:
+        loop.close()
+
+
+def collect_research_for_destinations(params: dict, destination_options: list) -> list:
+    """Collect research for all destinations using async parallel execution."""
+    start_time = time.time()
+
+    # Run async research in new event loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        async_results = loop.run_until_complete(
+            research_all_destinations_async(destination_options, params)
+        )
+    finally:
+        loop.close()
+
+    # Convert async results to format expected by planning_agent
+    results = []
+    for result in async_results:
+        tool_results = result.get("tool_results", {})
+        results.append({
+            "destination_option": result.get("destination_option", {}),
+            "weather": tool_results.get("weather", {}),
+            "attractions": tool_results.get("attractions", {}),
+            "stays": tool_results.get("stays", {}),
+            "restaurants": tool_results.get("restaurants", {}),
+            "transport": tool_results.get("transport"),
+            "research_latency_ms": result.get("research_latency_ms", 0),
+            "errors": result.get("errors", []),
+        })
+
+    # Log metrics
+    total_latency_ms = int((time.time() - start_time) * 1000)
+    logger.log_event("ASYNC_RESEARCH_COMPLETE", {
+        "destinations_count": len(destination_options),
+        "total_latency_ms": total_latency_ms,
+        "errors_count": sum(len(r.get("errors", [])) for r in results),
+    })
+
+    return results
+
 
 def planning_agent(
     llm,
@@ -459,6 +537,33 @@ def main() -> int:
         return 1
 
     try:
+        # Step 0: Validate input
+        print("\nĐang kiểm tra thông tin yêu cầu...", flush=True)
+        validation_result = validate_travel_input(user_request)
+        logger.log_event("VALIDATION_RESULT", {
+            "is_valid": validation_result["is_valid"],
+            "missing_fields": validation_result.get("missing_fields", []),
+            "assumptions": validation_result.get("assumptions", []),
+            "user_message": user_request,
+        })
+
+        if not validation_result["is_valid"]:
+            follow_up = validation_result.get("follow_up_question", "")
+            assumptions = validation_result.get("assumptions", [])
+            print("\n⚠️ Thiếu thông tin cần thiết:")
+            if assumptions:
+                print("Giả định:")
+                for a in assumptions:
+                    print(f"  - {a}")
+            print(f"\n{follow_up}")
+            return 1
+
+        # Show assumptions if any
+        if validation_result.get("assumptions"):
+            print("ℹ️ Giả định:")
+            for a in validation_result["assumptions"]:
+                print(f"  - {a}")
+
         llm = create_llm_provider()
 
         intent = check_intent(llm, user_request)
@@ -469,6 +574,17 @@ def main() -> int:
         
         print("\nĐang bóc tách yêu cầu...", flush=True)
         params = normalize_trip_params(intent_agent(llm, user_request))
+
+        # Merge normalized input from validation with params
+        normalized = validation_result.get("normalized_input", {})
+        if normalized.get("origin") and not params.get("origin"):
+            params["origin"] = normalized["origin"]
+        if normalized.get("budget") and not params.get("budget_vnd"):
+            params["budget_vnd"] = normalized["budget"]
+        if normalized.get("people") and not params.get("adults"):
+            params["adults"] = normalized["people"]
+        if normalized.get("days") and not params.get("days"):
+            params["days"] = normalized["days"]
 
         print("Đang tìm các địa điểm phù hợp...", flush=True)
         destination_options = destination_agent(llm, user_request, params)
@@ -481,7 +597,7 @@ def main() -> int:
             option["destination"] for option in destination_options
         )
         print(
-            f"Đang chạy tools riêng cho từng địa điểm: {destination_names}...",
+            f"Đang chạy tools song song cho từng địa điểm: {destination_names}...",
             flush=True,
         )
         destination_research = collect_research_for_destinations(

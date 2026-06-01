@@ -46,10 +46,107 @@ LOCAL_MODEL_PATH=./models/Phi-3-mini-4k-instruct-q4.gguf
 5.  **Grading & Bonus**: Follow the [SCORING.md](file:///Users/tindt/personal/ai-thuc-chien/day03-lab-agent/SCORING.md) to maximize your points and explore bonus metrics.
 
 ## 🛠️ How to Use This Baseline
+
 The code is designed as a **Production Prototype**. It includes:
 - **Telemetry**: Every action is logged in JSON format for later analysis.
 - **Robust Provider Pattern**: Easily extendable to any LLM API.
 - **Clean Skeletons**: Focus on the logic that matters—the agent's reasoning process.
+
+## 📋 Input Validation Tool
+
+The `validate_travel_input` tool validates and normalizes user requests before calling travel APIs.
+
+### Features:
+- Extracts: origin, destination, budget, people, days, nights, season, interests
+- Supports Vietnamese text parsing:
+  - "10 triệu" → budget=10000000
+  - "2 người" → people=2
+  - "3 ngày 2 đêm" → days=3, nights=2
+- Handles missing information with assumptions and follow-up questions
+
+### Usage:
+```python
+from src.tools.travel_api_tools import validate_travel_input
+
+result = validate_travel_input("T muốn đi biển budget 10 triệu cho 2 người, đi 3 ngày 2 đêm")
+# Returns:
+# {
+#   "is_valid": true,
+#   "missing_fields": [],
+#   "normalized_input": {...},
+#   "assumptions": [],
+#   "follow_up_question": null
+# }
+```
+
+## ⚡ Async Research Pipeline
+
+Research tools run **asynchronously** for faster performance:
+
+- Multiple destinations are researched **in parallel**
+- Within each destination, independent API calls run **concurrently**:
+  - geocode → weather
+  - geocode → attractions
+  - geocode → stays
+  - geocode → restaurants
+  - (if origin provided) → transport cost
+
+### Timeouts:
+| Tool | Timeout |
+|------|---------|
+| Geocode | 10s |
+| Weather | 10s |
+| Overpass (attractions/stays/restaurants) | 20s |
+| Total research per destination | 30s |
+
+### Error Handling:
+- If one API fails, others continue
+- Partial results are returned with error flags
+- No crashes from individual tool failures
+
+## 🔌 Public APIs Used
+
+| API | Provider | Purpose |
+|-----|----------|---------|
+| Nominatim | OpenStreetMap | Geocoding (location → coordinates) |
+| Open-Meteo | open-meteo.com | Weather forecast |
+| Overpass API | OpenStreetMap | POI search (attractions, hotels, restaurants) |
+| Haversine | Local | Transport cost estimation |
+
+No API keys required for these services.
+
+## 🚀 Running the Project
+
+### CLI Single-Shot
+```bash
+python test.py "T muốn đi du lịch gần biển mùa hè này, budget 10 triệu cho 2 người, đi 3 ngày 2 đêm"
+```
+
+### CLI Chatbot
+```bash
+python chatbot.py
+# Then type: Tôi muốn đi biển budget 10 triệu
+# Bot: Bạn đi mấy người, mấy ngày và xuất phát từ đâu?
+# Type: 2 người, 3 ngày, từ TP.HCM
+# Bot: generates plan
+```
+
+### Streamlit Web UI
+```bash
+streamlit run app.py
+```
+
+## 📊 Expected Behavior
+
+### Input Validation
+- **Valid input**: Continues to research and generate plan
+- **Invalid input**: Asks follow-up questions
+- **Missing info with defaults**: Proceeds with assumptions logged
+
+### Async Research
+- Research for multiple destinations runs in parallel
+- Response time significantly faster than sequential execution
+- Logs show individual tool latencies and success/failure
 
 ---
 
