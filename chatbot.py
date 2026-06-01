@@ -1,7 +1,11 @@
 import json
 import os
+import time
+import uuid
 from datetime import datetime
 
+from prompts import REWRITE_REQUEST_PROMPT
+from src.telemetry.logger import logger
 from test import (
     collect_research_for_destinations,
     create_llm_provider,
@@ -16,34 +20,179 @@ from src.tools.travel_api_tools import validate_travel_input
 
 HISTORY_PATH = "history.json"
 MAX_HISTORY_MESSAGES = 8
+MAX_INPUT_LENGTH = 2000
 
 # Simple state for collecting trip information across conversation
 _current_trip_request = {}
 
 
-def load_history() -> list:
-    if not os.path.exists(HISTORY_PATH):
-        return []
+def _timestamp() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def _new_conversation(title: str = "Hội thoại mới") -> dict:
+    now = _timestamp()
+    return {
+        "id": str(uuid.uuid4()),
+        "title": title,
+        "created_at": now,
+        "updated_at": now,
+        "messages": [],
+    }
+
+
+def _normalize_history_store(data) -> dict:
+    if isinstance(data, list):
+        conversation = _new_conversation("Hội thoại đã lưu")
+        conversation["messages"] = data
+        return {
+            "active_conversation_id": conversation["id"],
+            "conversations": [conversation],
+        }
+
+    if not isinstance(data, dict):
+        conversation = _new_conversation()
+        return {
+            "active_conversation_id": conversation["id"],
+            "conversations": [conversation],
+        }
+
+    conversations = data.get("conversations")
+    if not isinstance(conversations, list) or not conversations:
+        conversation = _new_conversation()
+        conversations = [conversation]
+
+    normalized = []
+    for index, conversation in enumerate(conversations, start=1):
+        if not isinstance(conversation, dict):
+            continue
+        conversation_id = conversation.get("id") or str(uuid.uuid4())
+        messages = conversation.get("messages")
+        normalized.append(
+            {
+                "id": conversation_id,
+                "title": conversation.get("title") or f"Hội thoại {index}",
+                "created_at": conversation.get("created_at") or _timestamp(),
+                "updated_at": conversation.get("updated_at") or _timestamp(),
+                "messages": messages if isinstance(messages, list) else [],
+            }
+        )
+
+    if not normalized:
+        normalized = [_new_conversation()]
+
+    active_id = data.get("active_conversation_id")
+    if active_id not in {item["id"] for item in normalized}:
+        active_id = normalized[-1]["id"]
+
+    return {
+        "active_conversation_id": active_id,
+        "conversations": normalized,
+    }
+
+
+def load_history_store(path: str = HISTORY_PATH) -> dict:
+    if not os.path.exists(path):
+        return _normalize_history_store(None)
 
     try:
-        with open(HISTORY_PATH, "r", encoding="utf-8") as history_file:
+        with open(path, "r", encoding="utf-8") as history_file:
             data = json.load(history_file)
     except (json.JSONDecodeError, OSError):
-        return []
+        data = None
 
-    if not isinstance(data, list):
-        return []
-    return data
+    store = _normalize_history_store(data)
+    save_history_store(store, path=path)
+    return store
+
+
+def save_history_store(store: dict, path: str = HISTORY_PATH) -> None:
+    with open(path, "w", encoding="utf-8") as history_file:
+        json.dump(store, history_file, ensure_ascii=False, indent=2)
+
+
+def get_conversations(store: dict) -> list:
+    return store.get("conversations", [])
+
+
+def get_active_conversation(store: dict) -> dict:
+    conversations = get_conversations(store)
+    active_id = store.get("active_conversation_id")
+    for conversation in conversations:
+        if conversation.get("id") == active_id:
+            return conversation
+    if conversations:
+        store["active_conversation_id"] = conversations[-1]["id"]
+        return conversations[-1]
+
+    conversation = _new_conversation()
+    store["active_conversation_id"] = conversation["id"]
+    store["conversations"] = [conversation]
+    return conversation
+
+
+def get_active_messages(store: dict) -> list:
+    return get_active_conversation(store).setdefault("messages", [])
+
+
+def create_conversation(store: dict, title: str = "Hội thoại mới") -> dict:
+    conversation = _new_conversation(title)
+    store.setdefault("conversations", []).append(conversation)
+    store["active_conversation_id"] = conversation["id"]
+    return conversation
+
+
+def set_active_conversation(store: dict, conversation_id: str) -> None:
+    if conversation_id in {item.get("id") for item in get_conversations(store)}:
+        store["active_conversation_id"] = conversation_id
+
+
+def reset_history_store(path: str = HISTORY_PATH) -> dict:
+    store = _normalize_history_store(None)
+    save_history_store(store, path=path)
+    return store
+
+
+def append_message_to_active(
+    store: dict,
+    role: str,
+    content: str,
+    metadata: dict = None,
+    path: str = HISTORY_PATH,
+) -> None:
+    item = {
+        "timestamp": _timestamp(),
+        "role": role,
+        "content": content,
+    }
+    if metadata:
+        item["metadata"] = metadata
+
+    conversation = get_active_conversation(store)
+    conversation.setdefault("messages", []).append(item)
+    conversation["updated_at"] = item["timestamp"]
+    if role == "user" and len(conversation["messages"]) == 1:
+        conversation["title"] = content[:48] + ("..." if len(content) > 48 else "")
+    save_history_store(store, path=path)
+
+
+def load_history() -> list:
+    return get_active_messages(load_history_store())
 
 
 def save_history(history: list) -> None:
-    with open(HISTORY_PATH, "w", encoding="utf-8") as history_file:
-        json.dump(history, history_file, ensure_ascii=False, indent=2)
+    conversation = _new_conversation("Hội thoại đã lưu")
+    conversation["messages"] = history
+    store = {
+        "active_conversation_id": conversation["id"],
+        "conversations": [conversation],
+    }
+    save_history_store(store)
 
 
 def append_history(history: list, role: str, content: str, metadata: dict = None) -> None:
     item = {
-        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "timestamp": _timestamp(),
         "role": role,
         "content": content,
     }
@@ -65,21 +214,22 @@ def recent_dialogue(history: list) -> list:
     return compact
 
 
+def validate_user_input(user_input: str) -> str:
+    """Sanitize and enforce guardrails on raw user input. Raises ValueError on violations."""
+    stripped = user_input.strip()
+    if not stripped:
+        raise ValueError("Yêu cầu không được để trống.")
+    if len(stripped) > MAX_INPUT_LENGTH:
+        raise ValueError(
+            f"Yêu cầu quá dài ({len(stripped)} ký tự). Tối đa {MAX_INPUT_LENGTH} ký tự."
+        )
+    return stripped
+
+
 def rewrite_user_request(llm, history: list, user_input: str) -> str:
     if not history:
         return user_input
 
-    system_prompt = """
-Bạn là bộ chuẩn hóa hội thoại cho travel planner.
-Nhiệm vụ: dựa trên lịch sử hội thoại và tin nhắn mới nhất, viết lại thành một yêu cầu du lịch đầy đủ, độc lập.
-
-Quy tắc:
-- Giữ nguyên các thông tin quan trọng đã có: điểm đến/chủ đề, điểm xuất phát, số ngày, ngân sách, ngày đi, sở thích.
-- Nếu user chỉ bổ sung một thông tin như "từ Hà Nội", hãy ghép nó vào yêu cầu du lịch trước đó.
-- Nếu assistant vừa hỏi điểm xuất phát và user trả lời địa điểm xuất phát, hãy ghép địa điểm đó vào yêu cầu du lịch gần nhất.
-- Không bịa thông tin chưa có.
-- Trả về DUY NHẤT nội dung yêu cầu đã viết lại, không markdown, không giải thích.
-""".strip()
     prompt = json.dumps(
         {
             "recent_dialogue": recent_dialogue(history),
@@ -88,11 +238,27 @@ Quy tắc:
         ensure_ascii=False,
         indent=2,
     )
-    response = llm.generate(prompt, system_prompt=system_prompt)
+    response = llm.generate(prompt, system_prompt=REWRITE_REQUEST_PROMPT)
     rewritten = str(response.get("content", "")).strip()
     return rewritten or user_input
 
 
+def run_planner_turn(llm, standalone_request: str) -> tuple:
+    timings: dict = {}
+
+    t0 = time.perf_counter()
+    params = normalize_trip_params(intent_agent(llm, standalone_request))
+    timings["intent_s"] = round(time.perf_counter() - t0, 2)
+
+    if params.get("origin_missing"):
+        answer = "Hãy cung cấp cho tôi thêm thông tin về địa điểm xuất phát của bạn"
+        metadata = {
+            "standalone_request": standalone_request,
+            "params": params,
+            "needs_origin": True,
+            "timings": timings,
+        }
+        return answer, metadata
 def run_planner_turn(llm, standalone_request: str, current_trip: dict = None) -> tuple:
     """Run a single turn of the travel planner with input validation."""
 
@@ -139,16 +305,24 @@ def run_planner_turn(llm, standalone_request: str, current_trip: dict = None) ->
         answer = "Hãy cung cấp cho tôi thêm thông tin về địa điểm xuất phát của bạn"
         return answer, trip, validation_result
 
+    t0 = time.perf_counter()
     destination_options = destination_agent(llm, standalone_request, params)
+    timings["destination_s"] = round(time.perf_counter() - t0, 2)
+
     if not destination_options:
         raise ValueError("Không tìm được địa điểm ứng viên phù hợp.")
 
     max_options = int(os.getenv("MAX_DESTINATION_OPTIONS", "3"))
     destination_options = destination_options[:max_options]
+
+    t0 = time.perf_counter()
     destination_research = collect_research_for_destinations(
         params,
         destination_options,
     )
+    timings["research_s"] = round(time.perf_counter() - t0, 2)
+
+    t0 = time.perf_counter()
     answer = planning_agent(
         llm,
         standalone_request,
@@ -156,6 +330,18 @@ def run_planner_turn(llm, standalone_request: str, current_trip: dict = None) ->
         destination_options,
         destination_research,
     )
+    timings["planning_s"] = round(time.perf_counter() - t0, 2)
+
+    from src.telemetry.metrics import tracker
+
+    metadata = {
+        "standalone_request": standalone_request,
+        "params": params,
+        "destination_options": destination_options,
+        "timings": timings,
+        "perf_stats": tracker.get_summary_stats(),
+    }
+    return answer, metadata
 
     # Clear trip after successful planning
     cleared_trip = {}
@@ -172,7 +358,8 @@ def print_intro(history: list) -> None:
 
 def main() -> int:
     load_environment()
-    history = load_history()
+    store = load_history_store()
+    history = get_active_messages(store)
     print_intro(history)
 
     # Simple state for multi-turn conversation
@@ -192,7 +379,15 @@ def main() -> int:
             print("Tạm biệt.")
             return 0
 
+        try:
+            user_input = validate_user_input(user_input)
+        except ValueError as validation_error:
+            print(f"[Guardrail] {validation_error}")
+            continue
+
         append_history(history, "user", user_input)
+        append_message_to_active(store, "user", user_input)
+        history = get_active_messages(store)
 
         try:
             standalone_request = rewrite_user_request(
@@ -205,12 +400,15 @@ def main() -> int:
                 llm, standalone_request, current_trip
             )
         except Exception as error:
+            logger.log_event("PIPELINE_ERROR", {"input": user_input, "error": str(error)})
             answer = f"Mình chưa xử lý được lượt này: {error}"
             current_trip = {}
             validation_result = None
 
         print("\nBot:")
         print(answer)
+        append_message_to_active(store, "assistant", answer, metadata=metadata)
+        history = get_active_messages(store)
         append_history(history, "assistant", answer, metadata={
             "validation": validation_result,
             "current_trip": current_trip,
