@@ -11,6 +11,7 @@ except ImportError:  # pragma: no cover - fallback for minimal lab environments.
     load_dotenv = None
 
 from prompts import (
+    CHECK_INTENT_PROMPT,
     DESTINATION_AGENT_PROMPT,
     INTENT_AGENT_PROMPT,
     PLANNING_AGENT_PROMPT,
@@ -107,6 +108,23 @@ GENERIC_DESTINATION_WORDS = {
     "nghỉ dưỡng",
 }
 
+def check_intent(llm, user_request: str) -> str:
+    """
+    Kiểm tra xem người dùng đã cung cấp địa điểm xuất phát chưa.
+    Returns "Có" hoặc "Không".
+    """
+    response = llm.generate(
+        f"Yêu cầu: {user_request}",
+        system_prompt=CHECK_INTENT_PROMPT,
+    )
+
+    content = str(response.get("content", "")).strip()
+
+    try:
+        data = _parse_json_object(content)
+        return "Có" if data.get("has_origin") is True else "Không"
+    except Exception:
+        return "Không"
 
 def intent_agent(llm, user_request: str) -> dict:
     response = llm.generate(
@@ -442,6 +460,13 @@ def main() -> int:
 
     try:
         llm = create_llm_provider()
+
+        intent = check_intent(llm, user_request)
+        if intent == "Không":
+            answer ="Hãy cho tôi biết thêm thông tin về địa điểm xuất phát của bạn để tôi có thể gợi ý lịch trình phù hợp nhất"
+            print(answer)
+            return 0
+        
         print("\nĐang bóc tách yêu cầu...", flush=True)
         params = normalize_trip_params(intent_agent(llm, user_request))
 
@@ -481,5 +506,5 @@ def main() -> int:
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == "__main__": 
     raise SystemExit(main())

@@ -1,88 +1,199 @@
-[
-  {
-    "timestamp": "2026-06-01T16:56:35",
-    "role": "user",
-    "content": "gợi ý địa điểm do lịch hà giang"
-  },
-  {
-    "timestamp": "2026-06-01T16:56:40",
-    "role": "assistant",
-    "content": "Hãy cung cấp cho tôi thêm thông tin về địa điểm xuất phát của bạn",
-    "metadata": {
-      "standalone_request": "gợi ý địa điểm do lịch hà giang",
-      "params": {
-        "destination": "Hà Giang",
-        "destination_candidates": [
-          "Hà Giang"
-        ],
-        "origin": null,
-        "origin_missing": true,
-        "days": 3,
-        "budget_vnd": null,
-        "departure_date": null,
-        "return_date": null,
-        "adults": 1,
-        "transport_mode": "car",
-        "cuisine": null,
-        "theme": "mountain",
-        "constraints": [
-          "lịch trình du lịch",
-          "những điểm tham quan nổi bật"
-        ]
-      },
-      "needs_origin": true,
-      "timings": {
-        "intent_s": 3.64,
-        "rewrite_s": 0.0,
-        "total_s": 4.41
-      }
-    }
-  },
-  {
-    "timestamp": "2026-06-01T16:56:50",
-    "role": "user",
-    "content": "tôi xuất phát từ hà nội"
-  },
-  {
-    "timestamp": "2026-06-01T16:57:25",
-    "role": "assistant",
-    "content": "### Tóm tắt yêu cầu\n\n- **Địa điểm:** Hà Giang\n- **Xuất phát:** Hà Nội\n- **Thời gian:** 3 ngày\n- **Phương tiện:** Ô tô\n\n### Bảng so sánh phương án\n\n| Phương án | Địa điểm     | Phương tiện | Thời tiết dự báo                        | Chi phí dự kiến (một chiều)    |\n|-----------|--------------|-------------|----------------------------------------|-------------------------------|\n| 1         | Hà Giang     | Ô tô        | Giông bão, mưa phùn nhẹ                | 960.863 VND - 1.784.460 VND    |\n\n### Chi tiết từng phương án\n\n#### Phương án 1: Hà Giang\n\n**Thời tiết dự báo:**\n- Ngày 1: Nhiệt độ 24.3°C - 31.5°C, mưa giông, xác suất mưa 80%\n- Ngày 2: Nhiệt độ 24.4°C - 31.8°C, mưa phùn nhẹ, xác suất mưa 87%\n- Ngày 3: Nhiệt độ 23.0°C - 32.3°C, mưa giông, xác suất mưa 98%\n\n**Vận chuyển:**\n- Khoảng cách: ~219.6 km\n- Chi phí một chiều ước tính cho ô tô: 960.863 VND - 1.784.460 VND\n\n**Lưu trú và ẩm thực:**\n- Không có thông tin hiện tại về khách sạn và nhà hàng do hạn chế kỹ thuật.\n\n### Lịch trình gợi ý\n\n#### Ngày 1\n- Khởi hành từ Hà Nội đến Hà Giang.\n- Khám phá trung tâm thành phố Hà Giang (nếu điều kiện thời tiết cho phép).\n\n#### Ngày 2\n- Tham quan một số địa điểm nổi tiếng (chưa xác định rõ danh sách chi tiết).\n- Dự phòng các hoạt động trong nhà nếu thời tiết xấu.\n\n#### Ngày 3\n- Hoàn tất chuyến tham quan.\n- Khởi hành về lại Hà Nội.\n\n### Ước tính ngân sách\n\n- Chi phí vận chuyển: 1.921.726 VND - 3.568.920 VND (khứ hồi)\n\n**Lưu ý:**\n- Tình hình thời tiết dự báo không thuận lợi, do đó cần chuẩn bị kế hoạch dự phòng cho các hoạt động trong nhà.\n- Thiếu dữ liệu cụ thể về hấp dẫn, lưu trú và ẩm thực; bạn cần tìm thêm thông tin từ các nguồn du lịch khác.\n- Chi phí thực tế có thể chênh lệch tùy thuộc vào thời điểm đặt và vẫn chuyển, cần liên hệ trước với các dịch vụ để nắm thông tin chính xác.",
-    "metadata": {
-      "standalone_request": "Tôi cần gợi ý lịch trình du lịch Hà Giang, xuất phát từ Hà Nội.",
-      "params": {
-        "destination": "Hà Giang",
-        "destination_candidates": [
-          "Hà Giang"
-        ],
-        "origin": "Hà Nội",
-        "origin_missing": false,
-        "days": 3,
-        "budget_vnd": null,
-        "departure_date": null,
-        "return_date": null,
-        "adults": 1,
-        "transport_mode": "car",
-        "cuisine": null,
-        "theme": "mountain",
-        "constraints": []
-      },
-      "destination_options": [
+{
+  "active_conversation_id": "87969c31-3ccd-449f-ae94-4178ad542153",
+  "conversations": [
+    {
+      "id": "8f5e7e75-381b-4d04-8ce4-3fc80fed5bc3",
+      "title": "Hội thoại đã lưu",
+      "created_at": "2026-06-01T17:22:27",
+      "updated_at": "2026-06-01T17:22:27",
+      "messages": [
         {
-          "destination": "Hà Giang",
-          "reason": "Địa điểm cụ thể do người dùng yêu cầu.",
-          "fit_tags": [
-            "mountain"
-          ]
+          "timestamp": "2026-06-01T16:02:44",
+          "role": "user",
+          "content": "Gợi ý cho tôi chuyến đi biển vào cuối tuần tới"
+        },
+        {
+          "timestamp": "2026-06-01T16:02:48",
+          "role": "assistant",
+          "content": "Hãy cung cấp cho tôi thêm thông tin về địa điểm xuất phát của bạn",
+          "metadata": {
+            "standalone_request": "Gợi ý cho tôi chuyến đi biển vào cuối tuần tới",
+            "params": {
+              "destination": null,
+              "destination_candidates": [],
+              "origin": null,
+              "origin_missing": true,
+              "days": 2,
+              "budget_vnd": null,
+              "departure_date": "2026-06-06",
+              "return_date": "2026-06-07",
+              "adults": 1,
+              "transport_mode": null,
+              "cuisine": null,
+              "theme": "beach",
+              "constraints": [
+                "cuối tuần tới",
+                "đi biển"
+              ]
+            },
+            "needs_origin": true
+          }
+        },
+        {
+          "timestamp": "2026-06-01T16:02:56",
+          "role": "user",
+          "content": "Hà Nội"
+        },
+        {
+          "timestamp": "2026-06-01T16:04:18",
+          "role": "assistant",
+          "content": "### Tóm tắt yêu cầu\nBạn đang lên kế hoạch cho một chuyến du lịch biển cuối tuần từ Hà Nội trong thời gian từ ngày 6-6-2026 đến ngày 7-6-2026, với mục tiêu chính là thư giãn tại bãi biển.\n\n### Bảng so sánh phương án\n\n| Tiêu chí              | Cát Bà, Hải Phòng                                | Sầm Sơn, Thanh Hóa                  |\n|-----------------------|--------------------------------------------------|-------------------------------------|\n| Khoảng cách (tuyến thẳng) | 128.8 km                                       | 143 km                              |\n| Dự báo thời tiết      | 28.7°C - 32.1°C, 4-8% mưa                       | 27.1°C - 34.2°C, 27-37% mưa        |\n| Chi phí di chuyển ước tính | 563.320 VND - 1.046.167 VND                       | 625.470 VND - 1.161.588 VND         |\n| Khách sạn             | Có 4 khách sạn trong khu vực                      | Chưa có dữ liệu                      |\n| Nhà hàng              | Có 4 nhà hàng                                      | Chưa có dữ liệu                      |\n| Điểm tham quan        | Dữ liệu tạm thời không truy cập được               | 2 điểm (Đền Đệ Tứ, Làng mây tre đan Hoằng Thịnh) |\n\n### Chi tiết từng phương án\n\n#### 1. Cát Bà, Hải Phòng\n- **Thời tiết**: Thích hợp cho du lịch ngoài trời với nhiệt độ dao động từ 28.7°C đến 32.1°C và khả năng mưa thấp (4-8%).\n- **Chi phí di chuyển**: Khoảng 563.320 VND - 1.046.167 VND từ Hà Nội bằng ô tô.\n- **Khách sạn**: Một số lựa chọn như Quang Minh, Princes Hotel, Phương Linh, Nhị Anh.\n- **Nhà hàng**: Một số nơi để thưởng thức ẩm thực địa phương như Ha Vy, Green Mango, Phong an lang, My Way.\n- **Điểm tham quan**: Dữ liệu bị thiếu, kiểm tra thêm các thông tin về hoạt động giải trí hoặc tour tại địa phương.\n\n#### 2. Sầm Sơn, Thanh Hóa\n- **Thời tiết**: Nhiệt độ cao hơn với dao động từ 27.1°C đến 34.2°C và khả năng mưa cao hơn (27-37%).\n- **Chi phí di chuyển**: Khoảng 625.470 VND - 1.161.588 VND từ Hà Nội bằng ô tô.\n- **Khách sạn**: Dữ liệu bị thiếu, cần tham khảo thêm các ứng dụng đặt phòng trực tuyến.\n- **Nhà hàng**: Chưa có dữ liệu, nên kiểm tra thêm từ các nguồn khác để có lựa chọn phù hợp.\n- **Điểm tham quan**: Đền Đệ Tứ và Làng mây tre đan Hoằng Thịnh là hai điểm du lịch nổi bật.\n\n### Lịch trình gợi ý\n\n#### Cát Bà, Hải Phòng\n- **Ngày 1**: Khởi hành từ Hà Nội, nhận phòng tại khách sạn. Buổi chiều, thăm quan và tắm biển.\n- **Ngày 2**: Tham gia các hoạt động ngoài trời hoặc nghỉ ngơi thư giãn tại bãi biển, trở về Hà Nội vào buổi chiều.\n\n#### Sầm Sơn, Thanh Hóa\n- **Ngày 1**: Khởi hành từ Hà Nội và nhận phòng. Chiều thư giãn tại bãi biển.\n- **Ngày 2**: Thăm các điểm du lịch như Đền Đệ Tứ hoặc Làng mây tre đan Hoằng Thịnh, về lại Hà Nội.\n\n### Ước tính ngân sách\n- **Cát Bà, Hải Phòng**: Ngân sách cần trừ ra chi phí di chuyển (563.320 VND - 1.046.167 VND) cho các hoạt động khác như ăn uống, vui chơi, và lưu trú.\n- **Sầm Sơn, Thanh Hóa**: Ngân sách cần trừ ra chi phí di chuyển (625.470 VND - 1.161.588 VND) cho hoạt động và dịch vụ khác.\n\n### Lưu ý\n- Do dữ liệu về khách sạn và nhà hàng không đầy đủ, nên kiểm tra chi tiết trước khi quyết định đặt chỗ.\n- Thời tiết có thể thay đổi, nên chuẩn bị sẵn các phương tiện bảo vệ dưới mưa.\n- Chi phí di chuyển là ước tính, vui lòng xác nhận giá thực tế gần với thời điểm đi lại.",
+          "metadata": {
+            "standalone_request": "Tôi cần gợi ý cho một chuyến đi biển vào cuối tuần tới, xuất phát từ Hà Nội.",
+            "params": {
+              "destination": null,
+              "destination_candidates": [],
+              "origin": "Hà Nội",
+              "origin_missing": false,
+              "days": 2,
+              "budget_vnd": null,
+              "departure_date": "2026-06-06",
+              "return_date": "2026-06-07",
+              "adults": 1,
+              "transport_mode": null,
+              "cuisine": null,
+              "theme": "beach",
+              "constraints": [
+                "đi biển",
+                "cuối tuần",
+                "xuất phát từ Hà Nội"
+              ]
+            },
+            "destination_options": [
+              {
+                "destination": "Cát Bà, Hải Phòng",
+                "reason": "Cát Bà là một hòn đảo đẹp, yên tĩnh với những bãi biển trong xanh và gần gũi với thiên nhiên, phù hợp cho chuyến đi biển cuối tuần từ Hà Nội.",
+                "fit_tags": [
+                  "beach",
+                  "weekend"
+                ],
+                "suggested_transport_mode": "car"
+              },
+              {
+                "destination": "Sầm Sơn, Thanh Hóa",
+                "reason": "Sầm Sơn nổi tiếng với bãi biển rộng lớn và các dịch vụ du lịch phát triển, dễ dàng di chuyển từ Hà Nội để tận hưởng chuyến đi cuối tuần.",
+                "fit_tags": [
+                  "beach",
+                  "weekend"
+                ],
+                "suggested_transport_mode": "car"
+              }
+            ]
+          }
         }
-      ],
-      "timings": {
-        "intent_s": 1.07,
-        "destination_s": 0.0,
-        "research_s": 25.95,
-        "planning_s": 6.31,
-        "rewrite_s": 1.12,
-        "total_s": 34.59
-      }
+      ]
+    },
+    {
+      "id": "87969c31-3ccd-449f-ae94-4178ad542153",
+      "title": "gợi ý du lịch hà giang",
+      "created_at": "2026-06-01T17:22:50",
+      "updated_at": "2026-06-01T17:23:32",
+      "messages": [
+        {
+          "timestamp": "2026-06-01T17:22:58",
+          "role": "user",
+          "content": "gợi ý du lịch hà giang"
+        },
+        {
+          "timestamp": "2026-06-01T17:23:01",
+          "role": "assistant",
+          "content": "Hãy cung cấp cho tôi thêm thông tin về địa điểm xuất phát của bạn",
+          "metadata": {
+            "standalone_request": "gợi ý du lịch hà giang",
+            "params": {
+              "destination": "Hà Giang",
+              "destination_candidates": [
+                "Hà Giang"
+              ],
+              "origin": null,
+              "origin_missing": true,
+              "days": 3,
+              "budget_vnd": null,
+              "departure_date": null,
+              "return_date": null,
+              "adults": 1,
+              "transport_mode": null,
+              "cuisine": null,
+              "theme": "mountain",
+              "constraints": []
+            },
+            "needs_origin": true,
+            "timings": {
+              "intent_s": 1.95,
+              "rewrite_s": 0.0,
+              "total_s": 2.79
+            }
+          }
+        },
+        {
+          "timestamp": "2026-06-01T17:23:09",
+          "role": "user",
+          "content": "tôi đi từ hà nội"
+        },
+        {
+          "timestamp": "2026-06-01T17:23:32",
+          "role": "assistant",
+          "content": "### Tóm tắt yêu cầu\nBạn muốn có một kế hoạch du lịch đến Hà Giang từ Hà Nội trong vòng 3 ngày, tập trung vào các trải nghiệm núi non.\n\n### Bảng so sánh phương án\n\n| Tiêu chí             | Hà Giang                                                      |\n|----------------------|----------------------------------------------------------------|\n| Điểm tham quan       | Light Fountain, Bác Hồ với đồng bào các dân tộc Hà Giang, New River Bridge, Le Hong Phong Street |\n| Chỗ ở                | Homestay, Cay's Homestay, Golden Stone Hotel, Cao Nguyen Hotel |\n| Nhà hàng             | Bang Gia, Kem NZ, Mon Ngon Hue, Bia Hoi, Breakfast              |\n| Thời tiết            | Giông bão, mưa phùn nhẹ, nhiệt độ từ 23°C đến 32.3°C            |\n| Phương tiện di chuyển| Ô tô từ Hà Nội                                                 |\n| Chi phí di chuyển    | ~960.863 VND - ~1.784.460 VND                                   |\n\n### Chi tiết từng phương án\n\n#### Phương án: Hà Giang\n\n**Lịch trình gợi ý**\n- **Ngày 1**: Khởi hành từ Hà Nội đi Hà Giang, thời gian di chuyển ước tính khoảng 6-7 giờ. Đến nơi, nhận phòng tại một trong các địa điểm lưu trú như Homestay hoặc Golden Stone Hotel. Buổi chiều tham quan Light Fountain và phố Lê Hồng Phong.\n- **Ngày 2**: Buổi sáng thăm khu Tưởng niệm Bác Hồ với đồng bào các dân tộc Hà Giang. Buổi chiều có thể ghé qua New River Bridge. Thưởng thức ẩm thực địa phương tại nhà hàng Bang Gia hoặc Mon Ngon Hue.\n- **Ngày 3**: Ghé thăm một vài nhà hàng/cafe khác như Kem NZ hoặc Breakfast trước khi khởi hành trở lại Hà Nội.\n\n**Ước tính ngân sách**\n- **Chi phí di chuyển**: ~1 triệu - 1.8 triệu VND khứ hồi.\n- **Chi phí chỗ ở và ăn uống**: Tùy thuộc vào lựa chọn cá nhân và mức chi tiêu, cần xác định cụ thể hơn qua các trang đặt phòng như Booking hoặc Agoda do thiếu thông tin giá cụ thể.\n\n**Lưu ý**\n- **Thời tiết**: Dự báo có giông bão và mưa phùn, nên chuẩn bị ô dù và áo mưa.\n- **Kiểm tra thông tin dịch vụ**: Nên kiểm tra thông tin chính xác về giờ mở cửa và đặt chỗ trước cho khách sạn và nhà hàng để có trải nghiệm tốt.\n- **Giá di chuyển là ước tính**: Phí thực tế có thể thay đổi tùy thuộc vào hãng xe và thời điểm đặt.\n\nHy vọng kế hoạch này sẽ giúp bạn có một chuyến đi đầy ý nghĩa và thuận lợi.",
+          "metadata": {
+            "standalone_request": "Yêu cầu: Gợi ý kế hoạch du lịch Hà Giang, xuất phát từ Hà Nội.",
+            "params": {
+              "destination": "Hà Giang",
+              "destination_candidates": [
+                "Hà Giang"
+              ],
+              "origin": "Hà Nội",
+              "origin_missing": false,
+              "days": 3,
+              "budget_vnd": null,
+              "departure_date": null,
+              "return_date": null,
+              "adults": 1,
+              "transport_mode": "car",
+              "cuisine": null,
+              "theme": "mountain",
+              "constraints": [
+                "xuất phát từ Hà Nội"
+              ]
+            },
+            "destination_options": [
+              {
+                "destination": "Hà Giang",
+                "reason": "Địa điểm cụ thể do người dùng yêu cầu.",
+                "fit_tags": [
+                  "mountain"
+                ]
+              }
+            ],
+            "timings": {
+              "intent_s": 1.47,
+              "destination_s": 0.0,
+              "research_s": 14.28,
+              "planning_s": 5.69,
+              "rewrite_s": 1.06,
+              "total_s": 22.61
+            },
+            "perf_stats": {
+              "call_count": 3,
+              "p50_latency_ms": 1468,
+              "p99_latency_ms": 1945,
+              "avg_latency_ms": 3036,
+              "total_tokens": 4044,
+              "avg_tokens_per_call": 1348,
+              "total_cost_usd": 0.016193
+            }
+          }
+        }
+      ]
     }
-  }
-]
+  ]
+}
